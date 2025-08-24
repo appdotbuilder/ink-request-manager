@@ -1,20 +1,40 @@
+import { db } from '../db';
+import { inkTypesTable, inkStockTable } from '../db/schema';
 import { type CreateInkTypeInput, type UpdateInkTypeInput, type InkType } from '../schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Create a new ink type
  * Purpose: Add a new ink type to the system (Admin only)
  */
 export async function createInkType(input: CreateInkTypeInput): Promise<InkType> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to create a new ink type and initialize its stock record
-  return Promise.resolve({
-    id: 0,
-    name: input.name,
-    description: input.description,
-    unit: input.unit,
-    created_at: new Date(),
-    updated_at: new Date()
-  } as InkType);
+  try {
+    // Insert the new ink type
+    const result = await db.insert(inkTypesTable)
+      .values({
+        name: input.name,
+        description: input.description,
+        unit: input.unit
+      })
+      .returning()
+      .execute();
+
+    const inkType = result[0];
+
+    // Initialize stock record for the new ink type
+    await db.insert(inkStockTable)
+      .values({
+        ink_type_id: inkType.id,
+        current_stock: 0,
+        minimum_stock: 0
+      })
+      .execute();
+
+    return inkType;
+  } catch (error) {
+    console.error('Ink type creation failed:', error);
+    throw error;
+  }
 }
 
 /**
@@ -22,9 +42,16 @@ export async function createInkType(input: CreateInkTypeInput): Promise<InkType>
  * Purpose: Retrieve list of all available ink types
  */
 export async function getInkTypes(): Promise<InkType[]> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to fetch all ink types from the database
-  return Promise.resolve([]);
+  try {
+    const results = await db.select()
+      .from(inkTypesTable)
+      .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to fetch ink types:', error);
+    throw error;
+  }
 }
 
 /**
@@ -32,16 +59,17 @@ export async function getInkTypes(): Promise<InkType[]> {
  * Purpose: Retrieve a specific ink type by its ID
  */
 export async function getInkTypeById(id: number): Promise<InkType | null> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to fetch a single ink type by ID
-  return Promise.resolve({
-    id,
-    name: 'Sample Ink',
-    description: 'Sample description',
-    unit: 'botol',
-    created_at: new Date(),
-    updated_at: new Date()
-  } as InkType);
+  try {
+    const results = await db.select()
+      .from(inkTypesTable)
+      .where(eq(inkTypesTable.id, id))
+      .execute();
+
+    return results[0] || null;
+  } catch (error) {
+    console.error('Failed to fetch ink type by ID:', error);
+    throw error;
+  }
 }
 
 /**
@@ -49,16 +77,37 @@ export async function getInkTypeById(id: number): Promise<InkType | null> {
  * Purpose: Modify ink type details (Admin only)
  */
 export async function updateInkType(input: UpdateInkTypeInput): Promise<InkType> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to update an existing ink type in the database
-  return Promise.resolve({
-    id: input.id,
-    name: input.name || 'Updated Name',
-    description: input.description || null,
-    unit: input.unit || 'botol',
-    created_at: new Date(),
-    updated_at: new Date()
-  } as InkType);
+  try {
+    // Build the update values object with only provided fields
+    const updateValues: Partial<typeof inkTypesTable.$inferInsert> = {
+      updated_at: new Date()
+    };
+
+    if (input.name !== undefined) {
+      updateValues.name = input.name;
+    }
+    if (input.description !== undefined) {
+      updateValues.description = input.description;
+    }
+    if (input.unit !== undefined) {
+      updateValues.unit = input.unit;
+    }
+
+    const result = await db.update(inkTypesTable)
+      .set(updateValues)
+      .where(eq(inkTypesTable.id, input.id))
+      .returning()
+      .execute();
+
+    if (result.length === 0) {
+      throw new Error(`Ink type with ID ${input.id} not found`);
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('Ink type update failed:', error);
+    throw error;
+  }
 }
 
 /**
@@ -66,7 +115,20 @@ export async function updateInkType(input: UpdateInkTypeInput): Promise<InkType>
  * Purpose: Remove an ink type from the system (Admin only)
  */
 export async function deleteInkType(id: number): Promise<boolean> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to delete an ink type and related records
-  return Promise.resolve(true);
+  try {
+    // First, delete the associated stock record
+    await db.delete(inkStockTable)
+      .where(eq(inkStockTable.ink_type_id, id))
+      .execute();
+
+    // Then delete the ink type
+    const result = await db.delete(inkTypesTable)
+      .where(eq(inkTypesTable.id, id))
+      .execute();
+
+    return (result.rowCount ?? 0) > 0;
+  } catch (error) {
+    console.error('Ink type deletion failed:', error);
+    throw error;
+  }
 }

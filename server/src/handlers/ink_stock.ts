@@ -1,13 +1,32 @@
+import { db } from '../db';
+import { inkStockTable, inkTypesTable } from '../db/schema';
 import { type UpdateInkStockInput, type InkStockWithDetails } from '../schema';
+import { eq, lt, and } from 'drizzle-orm';
 
 /**
  * Get all ink stock levels with details
  * Purpose: Retrieve current stock levels for all ink types (Admin only)
  */
 export async function getInkStockLevels(): Promise<InkStockWithDetails[]> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to fetch all ink stock with ink type details
-  return Promise.resolve([]);
+  try {
+    const results = await db.select({
+      id: inkStockTable.id,
+      ink_type_id: inkStockTable.ink_type_id,
+      ink_type_name: inkTypesTable.name,
+      ink_type_unit: inkTypesTable.unit,
+      current_stock: inkStockTable.current_stock,
+      minimum_stock: inkStockTable.minimum_stock,
+      updated_at: inkStockTable.updated_at
+    })
+    .from(inkStockTable)
+    .innerJoin(inkTypesTable, eq(inkStockTable.ink_type_id, inkTypesTable.id))
+    .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to get ink stock levels:', error);
+    throw error;
+  }
 }
 
 /**
@@ -15,17 +34,26 @@ export async function getInkStockLevels(): Promise<InkStockWithDetails[]> {
  * Purpose: Retrieve stock level for a single ink type
  */
 export async function getInkStockByType(inkTypeId: number): Promise<InkStockWithDetails | null> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to fetch stock information for a specific ink type
-  return Promise.resolve({
-    id: 1,
-    ink_type_id: inkTypeId,
-    ink_type_name: 'Sample Ink',
-    ink_type_unit: 'botol',
-    current_stock: 100,
-    minimum_stock: 10,
-    updated_at: new Date()
-  } as InkStockWithDetails);
+  try {
+    const results = await db.select({
+      id: inkStockTable.id,
+      ink_type_id: inkStockTable.ink_type_id,
+      ink_type_name: inkTypesTable.name,
+      ink_type_unit: inkTypesTable.unit,
+      current_stock: inkStockTable.current_stock,
+      minimum_stock: inkStockTable.minimum_stock,
+      updated_at: inkStockTable.updated_at
+    })
+    .from(inkStockTable)
+    .innerJoin(inkTypesTable, eq(inkStockTable.ink_type_id, inkTypesTable.id))
+    .where(eq(inkStockTable.ink_type_id, inkTypeId))
+    .execute();
+
+    return results[0] || null;
+  } catch (error) {
+    console.error('Failed to get ink stock by type:', error);
+    throw error;
+  }
 }
 
 /**
@@ -33,17 +61,55 @@ export async function getInkStockByType(inkTypeId: number): Promise<InkStockWith
  * Purpose: Modify current and minimum stock levels for an ink type (Admin only)
  */
 export async function updateInkStock(input: UpdateInkStockInput): Promise<InkStockWithDetails> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to update stock levels and return updated stock with details
-  return Promise.resolve({
-    id: 1,
-    ink_type_id: input.ink_type_id,
-    ink_type_name: 'Updated Ink',
-    ink_type_unit: 'botol',
-    current_stock: input.current_stock,
-    minimum_stock: input.minimum_stock,
-    updated_at: new Date()
-  } as InkStockWithDetails);
+  try {
+    // First, try to update existing stock record
+    const updateResult = await db.update(inkStockTable)
+      .set({
+        current_stock: input.current_stock,
+        minimum_stock: input.minimum_stock,
+        updated_at: new Date()
+      })
+      .where(eq(inkStockTable.ink_type_id, input.ink_type_id))
+      .returning()
+      .execute();
+
+    let stockRecord;
+    
+    if (updateResult.length === 0) {
+      // If no existing record, create a new one
+      const insertResult = await db.insert(inkStockTable)
+        .values({
+          ink_type_id: input.ink_type_id,
+          current_stock: input.current_stock,
+          minimum_stock: input.minimum_stock
+        })
+        .returning()
+        .execute();
+      stockRecord = insertResult[0];
+    } else {
+      stockRecord = updateResult[0];
+    }
+
+    // Now get the updated record with ink type details
+    const results = await db.select({
+      id: inkStockTable.id,
+      ink_type_id: inkStockTable.ink_type_id,
+      ink_type_name: inkTypesTable.name,
+      ink_type_unit: inkTypesTable.unit,
+      current_stock: inkStockTable.current_stock,
+      minimum_stock: inkStockTable.minimum_stock,
+      updated_at: inkStockTable.updated_at
+    })
+    .from(inkStockTable)
+    .innerJoin(inkTypesTable, eq(inkStockTable.ink_type_id, inkTypesTable.id))
+    .where(eq(inkStockTable.id, stockRecord.id))
+    .execute();
+
+    return results[0];
+  } catch (error) {
+    console.error('Failed to update ink stock:', error);
+    throw error;
+  }
 }
 
 /**
@@ -51,7 +117,24 @@ export async function updateInkStock(input: UpdateInkStockInput): Promise<InkSto
  * Purpose: Retrieve ink types where current stock is below minimum (Admin only)
  */
 export async function getLowStockAlerts(): Promise<InkStockWithDetails[]> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is to find and return ink types with stock below minimum threshold
-  return Promise.resolve([]);
+  try {
+    const results = await db.select({
+      id: inkStockTable.id,
+      ink_type_id: inkStockTable.ink_type_id,
+      ink_type_name: inkTypesTable.name,
+      ink_type_unit: inkTypesTable.unit,
+      current_stock: inkStockTable.current_stock,
+      minimum_stock: inkStockTable.minimum_stock,
+      updated_at: inkStockTable.updated_at
+    })
+    .from(inkStockTable)
+    .innerJoin(inkTypesTable, eq(inkStockTable.ink_type_id, inkTypesTable.id))
+    .where(lt(inkStockTable.current_stock, inkStockTable.minimum_stock))
+    .execute();
+
+    return results;
+  } catch (error) {
+    console.error('Failed to get low stock alerts:', error);
+    throw error;
+  }
 }
